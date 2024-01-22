@@ -1,0 +1,121 @@
+syntax = "proto3";
+
+package rpc;
+
+option go_package = "github.com/appcrash/media/server/rpc";
+
+enum Version {
+  DUMMY = 0;  // first must be zero in proto3
+  DEFAULT = 2; // increase it every time this file being changed
+}
+
+enum CodecType {
+  RAW = 0;     // raw packet data
+  TELEPHONE_EVENT_8K = 1;
+  TELEPHONE_EVENT_16K = 2;
+  PCM_ALAW = 3;
+  AMRNB = 4;
+  AMRWB = 5;
+  H264 = 6;
+  EVS = 7;
+}
+
+message VersionNumber {
+  Version ver = 1;
+}
+
+message Empty {}
+
+message CodecInfo {
+  uint32 payload_number = 1;  // negotiated payload type, dynamic(96 ~ 127) or fixed type
+  CodecType payload_type = 2; // used to identify mime type, like "AMR","PCM_ALAW"
+  string codec_param = 3;     // parameter of codec, like fmtp: ...
+}
+
+message CreateParam {
+  string peer_ip = 1;                // remote rtp ip
+  uint32 peer_port = 2;              // remote rtp port
+  repeated CodecInfo codecs = 3;
+  string graph_desc = 4;             // used to describe event graph
+  string instance_id = 5;            // which instance creates this session
+}
+
+message UpdateParam {
+  string session_id = 1;
+  string peer_ip = 2;
+  uint32 peer_port = 3;
+}
+
+message StartParam {
+  string session_id = 1;
+}
+
+message StopParam {
+  string session_id = 1;
+}
+
+
+message Status {
+  string status = 1;
+}
+
+message Session {
+  string session_id = 1;
+  string local_ip = 2;
+  uint32 local_rtp_port = 3;
+  string peer_ip = 4;
+  uint32 peer_rtp_port = 5;
+}
+
+message Action {
+  string session_id = 1;
+  string cmd = 2;
+  string cmd_arg = 3;
+}
+
+message ActionResult {
+  string session_id = 1;
+  string state = 2;
+}
+
+message ActionEvent {
+  string session_id = 1;
+  string event = 2;
+}
+
+message PushData {
+  // only used in first packet, following packets use the same session id,cmd and node_name
+  string session_id = 1;
+  string cmd = 2;
+  string node_name = 3;
+
+  bytes  data = 4;
+}
+
+
+enum SystemCommand {
+  USER_EVENT = 0;  // used by other subsystem
+  REGISTER = 1;
+  KEEPALIVE = 2;
+  SESSION_INFO = 3;
+}
+
+message SystemEvent {
+  SystemCommand cmd = 1;
+  string instance_id = 2;
+  string session_id = 3;
+  string event = 4;
+}
+
+
+service MediaApi {
+  rpc GetVersion(Empty) returns (VersionNumber) {}
+  rpc PrepareSession(CreateParam) returns (Session) {}
+  rpc UpdateSession(UpdateParam) returns (Status) {}
+  rpc StartSession(StartParam) returns (Status) {}
+  rpc StopSession(StopParam) returns (Status) {}
+  rpc ExecuteAction(Action) returns (ActionResult) {}
+  rpc ExecuteActionWithNotify(Action) returns (stream ActionEvent) {}
+  rpc ExecuteActionWithPush(stream PushData) returns (ActionResult) {}
+  rpc SystemChannel(stream SystemEvent) returns (stream SystemEvent) {}
+}
