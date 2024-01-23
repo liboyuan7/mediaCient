@@ -128,7 +128,7 @@ func StartNewCallSession(p *port.MyPortPool, id string, isAudio bool, graphDesc 
 		}}
 	} else {
 		codecs = []*rpc.CodecInfo{{
-			PayloadNumber: 96, // Modify this according to your specific payload number for H.264
+			PayloadNumber: 123, // Modify this according to your specific payload number for H.264
 			PayloadType:   rpc.CodecType_H264,
 			CodecParam:    "",
 		}}
@@ -205,7 +205,7 @@ func (c *client) mockSendRtp(id string, localIpStr string, localPort int, remote
 	if isAudio {
 		session.SsrcStreamOutForIndex(strIndex).SetProfile("PCMA", 8)
 	} else {
-		session.SsrcStreamOutForIndex(strIndex).SetProfile("H264", 96)
+		session.SsrcStreamOutForIndex(strIndex).SetProfile("H264", 123)
 	}
 
 	if _, err = session.AddRemote(&rtp.Address{
@@ -249,7 +249,7 @@ func (c *client) mockSendRtp(id string, localIpStr string, localPort int, remote
 						return
 					}
 					pt, pts := packet.Payload, packet.Pts
-					session.PacketH264ToRtpAndSend(pt, uint32(pts), 96)
+					session.PacketH264ToRtpAndSend(pt, uint32(pts), 123)
 
 				case <-ctx.Done():
 					return
@@ -264,7 +264,7 @@ func (c *client) mockSendRtp(id string, localIpStr string, localPort int, remote
 				select {
 				case <-ticker.C:
 					packet := session.NewDataPacket(pts)
-					packet.SetPayloadType(96)
+					packet.SetPayloadType(123)
 					packet.SetPayload(samples[:])
 					session.WriteData(packet)
 				case <-ctx.Done():
@@ -319,16 +319,6 @@ func (c *client) updateMediaGraph(ctx context.Context, graphDesc string, session
 	}, opts...); err != nil {
 		panic(err)
 	}
-}
-
-func (c *client) startVideoRecord(ctx context.Context, SessionId string) {
-	desc := "[h264_file_sink] <-> 'play'"
-	c.updateMediaGraph(ctx, desc, SessionId)
-}
-
-func (c *client) stopVideoRecord(ctx context.Context, SessionId string) {
-	desc := "[h264_file_sink] <-> 'stop'"
-	c.updateMediaGraph(ctx, desc, SessionId)
 }
 
 func (c *client) handleRawByte(data []byte) {
@@ -399,10 +389,27 @@ func (c *client) handleRawByte(data []byte) {
 		}
 
 		c.h264PacketChan <- packet
-
 		c.frame = c.frame[frameEnd:]
-
-		//fmt.Printf("pts:%v len:%v\n", packet.Pts, len(packet.Payload))
 	}
 
+}
+
+func (c *client) startRtpPlay(ctx context.Context, SessionId string) {
+	desc := "[rtp_test] <-> 'play'"
+	c.updateMediaGraph(ctx, desc, SessionId)
+}
+
+func (c *client) stopRtpPlay(ctx context.Context, SessionId string) {
+	desc := "[rtp_test] <-> 'stop'"
+	c.updateMediaGraph(ctx, desc, SessionId)
+}
+
+func (c *client) startVideoRecord(ctx context.Context, SessionId string) {
+	desc := "[h264_file_sink] <-> 'play'"
+	c.updateMediaGraph(ctx, desc, SessionId)
+}
+
+func (c *client) stopVideoRecord(ctx context.Context, SessionId string) {
+	desc := "[h264_file_sink] <-> 'stop'"
+	c.updateMediaGraph(ctx, desc, SessionId)
 }

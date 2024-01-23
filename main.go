@@ -71,8 +71,7 @@ func runBenchmark(concurrency, numRequests int, p *port.MyPortPool) {
 				if isAudio {
 					client.StartNewCallSession(p, id, true, *audioGraph)
 				} else {
-					graph := "[rtp_src] ->{ [h264_file_sink codec_name=h264 width=540 height=960  file_name='/data/unitTestMediaFile/recording.mp4'],[rtp_sink]}"
-					client.StartNewCallSession(p, id, false, graph)
+					client.StartNewCallSession(p, id, false, *videoGraph)
 				}
 			}
 		}(i)
