@@ -69,9 +69,9 @@ func runBenchmark(concurrency, numRequests int, p *port.MyPortPool) {
 				isAudio := atomic.LoadInt32(&flag) == 1
 				atomic.StoreInt32(&flag, 1-atomic.LoadInt32(&flag))
 				if isAudio {
-					client.StartNewCallSession(p, id, true, *audioGraph)
+					client.StartSessionCall(p, id, true, *audioGraph)
 				} else {
-					client.StartNewCallSession(p, id, false, *videoGraph)
+					client.StartSessionCall(p, id, false, *videoGraph)
 				}
 			}
 		}(i)
