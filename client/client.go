@@ -22,12 +22,13 @@ var (
 type recvFunc func(event *rpc.SystemEvent)
 
 type client struct {
-	instanceId     string
-	conn           *grpc.ClientConn
-	mediaClient    rpc.MediaApiClient
-	sysStream      rpc.MediaApi_SystemChannelClient
-	frame          []byte
-	h264PacketChan chan *MyH264Packet
+	instanceId      string
+	conn            *grpc.ClientConn
+	mediaClient     rpc.MediaApiClient
+	sysStream       rpc.MediaApi_SystemChannelClient
+	frame           []byte
+	h264PacketChan  chan *MyH264Packet
+	audioPacketChan chan []byte
 }
 
 type MyH264Packet struct {
@@ -106,10 +107,11 @@ func (c *client) close() {
 	c.conn.Close()
 }
 
-func StartNewCallSession(p *port.MyPortPool, id string, isAudio bool, graphDesc string) {
+func StartSessionCall(p *port.MyPortPool, id string, isAudio bool, graphDesc string) {
 	instanceId := id
 	c := &client{instanceId: instanceId}
 	c.h264PacketChan = make(chan *MyH264Packet, 32)
+	c.audioPacketChan = make(chan []byte, 32)
 
 	c.connect(func(event *rpc.SystemEvent) {
 		//fmt.Printf("recv event: %v\n", event)
@@ -166,7 +168,9 @@ func StartNewCallSession(p *port.MyPortPool, id string, isAudio bool, graphDesc 
 	}, opts...); err != nil {
 		panic(err)
 	}*/
-	if !isAudio {
+	if isAudio {
+		go c.getAudioData("./audio.pcm")
+	} else {
 		go c.readH264AndPacket("./raw.h264")
 	}
 
@@ -222,16 +226,16 @@ func (c *client) mockSendRtp(id string, localIpStr string, localPort int, remote
 	ctx, cancel := context.WithCancel(context.Background())
 	if isAudio {
 		go func() {
-			var samples [160]byte
 			var pts uint32
-			ticker := time.NewTicker(20 * time.Millisecond)
-
 			for {
 				select {
-				case <-ticker.C:
+				case payload, more := <-c.audioPacketChan:
+					if !more {
+						return
+					}
 					packet := session.NewDataPacket(pts)
 					packet.SetPayloadType(8)
-					packet.SetPayload(samples[:])
+					packet.SetPayload(payload)
 					session.WriteData(packet)
 				case <-ctx.Done():
 					session.CloseSession()
@@ -241,7 +245,6 @@ func (c *client) mockSendRtp(id string, localIpStr string, localPort int, remote
 		}()
 	} else {
 		go func() {
-
 			for {
 				select {
 				case packet, more := <-c.h264PacketChan:
@@ -252,26 +255,10 @@ func (c *client) mockSendRtp(id string, localIpStr string, localPort int, remote
 					session.PacketH264ToRtpAndSend(pt, uint32(pts), 123)
 
 				case <-ctx.Done():
-					return
-				}
-			}
-			/*var samples [1200]byte
-			var pts uint32
-			fps := 30
-			frameInterval := time.Second / time.Duration(fps)
-			ticker := time.NewTicker(frameInterval)
-			for {
-				select {
-				case <-ticker.C:
-					packet := session.NewDataPacket(pts)
-					packet.SetPayloadType(123)
-					packet.SetPayload(samples[:])
-					session.WriteData(packet)
-				case <-ctx.Done():
 					session.CloseSession()
 					return
 				}
-			}*/
+			}
 		}()
 	}
 
@@ -279,7 +266,6 @@ func (c *client) mockSendRtp(id string, localIpStr string, localPort int, remote
 }
 
 func (c *client) readH264AndPacket(filePath string) {
-	// 打开文件
 	file, err := os.Open(filePath)
 	if err != nil {
 		fmt.Printf("open file fail %v\n", filePath)
@@ -287,17 +273,12 @@ func (c *client) readH264AndPacket(filePath string) {
 	}
 	defer file.Close()
 
-	// 创建一个缓冲区，用于读取文件内容
 	buffer := make([]byte, 4096)
-
 	framesPerSecond := 25
 	frameDuration := time.Second / time.Duration(framesPerSecond)
 	ticker := time.Tick(frameDuration)
 
-	// 读取文件内容并发送
 	for range ticker {
-		//for {
-		// 从文件中读取数据
 		n, err := file.Read(buffer)
 		if err != nil {
 			if err != io.EOF {
@@ -308,6 +289,30 @@ func (c *client) readH264AndPacket(filePath string) {
 
 		c.handleRawByte(buffer[:n])
 	}
+}
+
+func (c *client) getAudioData(filePath string) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		fmt.Printf("open file fail %v\n", filePath)
+		return
+	}
+	defer file.Close()
+
+	buffer := make([]byte, 160)
+	ticker := time.Tick(20 * time.Millisecond)
+
+	for range ticker {
+		n, err := file.Read(buffer)
+		if err != nil {
+			if err != io.EOF {
+				fmt.Println("Read file error:", err)
+			}
+			break
+		}
+		c.audioPacketChan <- buffer[:n]
+	}
+	return
 }
 
 func (c *client) updateMediaGraph(ctx context.Context, graphDesc string, sessionId string) {
@@ -392,16 +397,6 @@ func (c *client) handleRawByte(data []byte) {
 		c.frame = c.frame[frameEnd:]
 	}
 
-}
-
-func (c *client) startRtpPlay(ctx context.Context, SessionId string) {
-	desc := "[rtp_test] <-> 'play'"
-	c.updateMediaGraph(ctx, desc, SessionId)
-}
-
-func (c *client) stopRtpPlay(ctx context.Context, SessionId string) {
-	desc := "[rtp_test] <-> 'stop'"
-	c.updateMediaGraph(ctx, desc, SessionId)
 }
 
 func (c *client) startVideoRecord(ctx context.Context, SessionId string) {
