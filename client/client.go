@@ -37,7 +37,7 @@ type MyH264Packet struct {
 }
 
 func (c *client) keepalive(ctx context.Context) {
-	ticker := time.NewTicker(time.Second * 3)
+	ticker := time.NewTicker(time.Second * 2)
 	for {
 		select {
 		case <-ticker.C:
@@ -117,7 +117,7 @@ func StartSessionCall(p *port.MyPortPool, id string, isAudio bool, graphDesc str
 		//fmt.Printf("recv event: %v\n", event)
 	})
 	ctx, cancel := context.WithCancel(context.Background())
-	go c.keepalive(ctx)
+
 	var opts []grpc.CallOption
 	var codecs []*rpc.CodecInfo
 	peerPort := uint32(p.Get())
@@ -144,20 +144,30 @@ func StartSessionCall(p *port.MyPortPool, id string, isAudio bool, graphDesc str
 	}, opts...)
 	if err != nil {
 		panic(err)
+		//fmt.Printf("error PrepareSession fail %v\n", err)
+		//return
+
 	}
 
 	localPort := uint32(p.Get())
 	if _, err = c.mediaClient.UpdateSession(ctx, &rpc.UpdateParam{SessionId: session.SessionId, PeerPort: localPort}, opts...); err != nil {
 		panic(err)
+		//fmt.Printf("error UpdateSession fail %v\n", err)
+		//return
 	}
 	if _, err = c.mediaClient.StartSession(ctx, &rpc.StartParam{SessionId: session.SessionId}, opts...); err != nil {
 		panic(err)
+		//fmt.Printf("error StartSession fail %v\n", err)
+		//return
 	}
+	go c.keepalive(ctx)
 	time.Sleep(1 * time.Second)
 
 	var cancelRtp context.CancelFunc
 	if cancelRtp, err = c.mockSendRtp(id, "127.0.0.1", int(localPort), session.LocalIp, int(session.LocalRtpPort), isAudio); err != nil {
 		panic(err)
+		//fmt.Printf("error mockSendRtp fail %v\n", err)
+		//return
 	}
 	go c.reportSessionInfo(ctx, session.SessionId)
 
@@ -174,20 +184,19 @@ func StartSessionCall(p *port.MyPortPool, id string, isAudio bool, graphDesc str
 		go c.readH264AndPacket("./raw.h264")
 	}
 
-	time.Sleep(time.Second * 30)
+	time.Sleep(time.Second * 120)
 	if _, err = c.mediaClient.StopSession(ctx, &rpc.StopParam{SessionId: session.SessionId}, opts...); err != nil {
 		panic(err)
 	} else {
 		fmt.Printf("StopSession %v\n", id)
 	}
-
 	time.Sleep(1 * time.Second)
 	cancel()
 	cancelRtp()
 	p.Put(uint16(peerPort))
 	p.Put(uint16(localPort))
-	time.Sleep(1 * time.Second)
 	c.close()
+	time.Sleep(3 * time.Second)
 
 }
 
@@ -242,6 +251,7 @@ func (c *client) mockSendRtp(id string, localIpStr string, localPort int, remote
 					return
 				}
 			}
+
 		}()
 	} else {
 		go func() {
@@ -259,6 +269,7 @@ func (c *client) mockSendRtp(id string, localIpStr string, localPort int, remote
 					return
 				}
 			}
+
 		}()
 	}
 
