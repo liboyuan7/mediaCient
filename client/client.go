@@ -11,6 +11,7 @@ import (
 	"mediaClient/port"
 	"net"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -143,31 +144,31 @@ func StartSessionCall(p *port.MyPortPool, id string, isAudio bool, graphDesc str
 		InstanceId: instanceId,
 	}, opts...)
 	if err != nil {
-		panic(err)
-		//fmt.Printf("error PrepareSession fail %v\n", err)
-		//return
+		//panic(err)
+		fmt.Printf("error PrepareSession fail %v\n", err)
+		return
 
 	}
 
 	localPort := uint32(p.Get())
 	if _, err = c.mediaClient.UpdateSession(ctx, &rpc.UpdateParam{SessionId: session.SessionId, PeerPort: localPort}, opts...); err != nil {
-		panic(err)
-		//fmt.Printf("error UpdateSession fail %v\n", err)
-		//return
+		//panic(err)
+		fmt.Printf("error UpdateSession fail %v\n", err)
+		return
 	}
 	if _, err = c.mediaClient.StartSession(ctx, &rpc.StartParam{SessionId: session.SessionId}, opts...); err != nil {
-		panic(err)
-		//fmt.Printf("error StartSession fail %v\n", err)
-		//return
+		//panic(err)
+		fmt.Printf("error StartSession fail %v\n", err)
+		return
 	}
 	go c.keepalive(ctx)
 	time.Sleep(1 * time.Second)
 
 	var cancelRtp context.CancelFunc
 	if cancelRtp, err = c.mockSendRtp(id, "127.0.0.1", int(localPort), session.LocalIp, int(session.LocalRtpPort), isAudio); err != nil {
-		panic(err)
-		//fmt.Printf("error mockSendRtp fail %v\n", err)
-		//return
+		//panic(err)
+		fmt.Printf("error mockSendRtp fail %v\n", err)
+		return
 	}
 	go c.reportSessionInfo(ctx, session.SessionId)
 
@@ -179,9 +180,11 @@ func StartSessionCall(p *port.MyPortPool, id string, isAudio bool, graphDesc str
 		panic(err)
 	}*/
 	if isAudio {
-		go c.getAudioData("./audio.pcm")
+		//go c.getAudioData("./audio.pcm")
+		go c.getAudioData1()
 	} else {
-		go c.readH264AndPacket("./raw.h264")
+		//go c.readH264AndPacket("./raw.h264")
+		go c.readH264AndPacket1()
 	}
 
 	time.Sleep(time.Second * 120)
@@ -418,4 +421,112 @@ func (c *client) startVideoRecord(ctx context.Context, SessionId string) {
 func (c *client) stopVideoRecord(ctx context.Context, SessionId string) {
 	desc := "[h264_file_sink] <-> 'stop'"
 	c.updateMediaGraph(ctx, desc, SessionId)
+}
+
+var (
+	audioDataCache     []byte // 用于存储音频文件数据的全局缓存
+	audioDataCacheLock sync.Mutex
+	videoDataCache     []byte // 用于存储音频文件数据的全局缓存
+	videoDataCacheLock sync.Mutex
+)
+
+func (c *client) getAudioData1() {
+	ticker := time.Tick(20 * time.Millisecond)
+	start := 0
+	end := 160
+
+	for range ticker {
+		audioDataCacheLock.Lock()
+		diff := len(audioDataCache) - end
+		if diff < 0 {
+			break
+		}
+		if diff >= 160 {
+			data := audioDataCache[start:end]
+			c.audioPacketChan <- data
+			audioDataCacheLock.Unlock()
+		} else {
+			c.audioPacketChan <- audioDataCache[start:]
+			audioDataCacheLock.Unlock()
+			break
+		}
+		start += 160
+		end += 160
+	}
+}
+
+func (c *client) readH264AndPacket1() {
+	framesPerSecond := 25
+	frameDuration := time.Second / time.Duration(framesPerSecond)
+	ticker := time.Tick(frameDuration)
+	start := 0
+	end := 4096
+
+	for range ticker {
+		videoDataCacheLock.Lock()
+		diff := len(videoDataCache) - end
+		if diff < 0 {
+			break
+		}
+		if diff > 4096 {
+			data := videoDataCache[start:end]
+			c.handleRawByte(data)
+			videoDataCacheLock.Unlock()
+		} else {
+			c.handleRawByte(videoDataCache[start:])
+			videoDataCacheLock.Unlock()
+			break
+		}
+		start += 4096
+		end += 4096
+	}
+}
+
+func InitAudioDataCache(filePath string) error {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return fmt.Errorf("open file failed: %v", err)
+	}
+	defer file.Close()
+
+	// 读取文件数据并存储到缓存中
+	var data []byte
+	buffer := make([]byte, 4096)
+	for {
+		n, err := file.Read(buffer)
+		if err != nil {
+			if err != io.EOF {
+				return fmt.Errorf("read file error: %v", err)
+			}
+			break
+		}
+		data = append(data, buffer[:n]...)
+	}
+	audioDataCache = data
+	return nil
+}
+
+func InitVideoDataCache(filePath string) error {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return fmt.Errorf("open file failed: %v", err)
+	}
+	defer file.Close()
+
+	// 读取文件数据并存储到缓存中
+	var data []byte
+	buffer := make([]byte, 4096)
+	for {
+		n, err := file.Read(buffer)
+		if err != nil {
+			if err != io.EOF {
+				return fmt.Errorf("read file error: %v", err)
+			}
+			break
+		}
+		data = append(data, buffer[:n]...)
+	}
+
+	videoDataCache = data
+	return nil
 }

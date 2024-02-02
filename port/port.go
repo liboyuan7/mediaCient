@@ -2,28 +2,20 @@ package port
 
 import (
 	"fmt"
-	"github.com/appcrash/media/server/utils"
 	"sync"
 )
 
 type MyPortPool struct {
 	mutex sync.Mutex
 
-	freePortSet *utils.Set[uint16] // store rtp ports (even number)
+	freePortSet *Set[uint16] // store rtp ports (even number)
 	start, end  uint16
 }
 
-var instance *MyPortPool
-var once sync.Once
-
-func NewMyPortPool(start uint16, end uint16) *MyPortPool {
-	once.Do(func() {
-		instance = &MyPortPool{
-			freePortSet: utils.NewSet[uint16](),
-		}
-		instance.Init(start, end)
-	})
-	return instance
+func NewPortPool() *MyPortPool {
+	return &MyPortPool{
+		freePortSet: NewSet[uint16](),
+	}
 }
 
 func (p *MyPortPool) Init(start uint16, end uint16) {

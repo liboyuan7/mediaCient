@@ -34,6 +34,9 @@ func main() {
 		return
 	}
 
+	client.InitAudioDataCache("./audio.pcm")
+	client.InitVideoDataCache("./raw.h264")
+
 	// Set up a connection to the server.
 	/*conn, err := grpc.Dial(*serverAddr, grpc.WithInsecure())
 	if err != nil {
@@ -41,7 +44,8 @@ func main() {
 	}
 	defer conn.Close()*/
 
-	portRequest := port.NewMyPortPool(20000, 30000)
+	portRequest := port.NewPortPool()
+	portRequest.Init(20000, 30000)
 
 	// Perform the benchmark.
 	start := time.Now()
@@ -73,6 +77,7 @@ func runBenchmark(concurrency, numRequests int, p *port.MyPortPool) {
 				} else {
 					client.StartSessionCall(p, id, false, *videoGraph)
 				}
+				time.Sleep(time.Millisecond)
 			}
 		}(i)
 	}
