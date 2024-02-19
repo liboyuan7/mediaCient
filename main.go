@@ -3,8 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
-	"mediaClient/client"
-	"mediaClient/port"
+	"github.com/streamFunc/mediaClient/client"
+	"github.com/streamFunc/mediaClient/port"
 	"net"
 	"strconv"
 	"sync"

@@ -1,10 +1,10 @@
-module mediaClient
+module github.com/streamFunc/mediaClient
 
 go 1.19
 
 require (
 	github.com/appcrash/media v0.0.4-0.20231205004418-e70ef46d7dea
-	github.com/liboyuan7/RTPGoAPI v1.0.8
+	github.com/streamFunc/RTPGoAPI v1.0.10
 	google.golang.org/grpc v1.60.1
 )
 
@@ -18,4 +18,4 @@ require (
 )
 
 //replace github.com/appcrash/media => ../media
-//replace github.com/liboyuan7/RTPGoAPI => ../RTPGoAPI
+//replace github.com/streamFunc/RTPGoAPI => ../RTPGoAPI
