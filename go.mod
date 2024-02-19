@@ -4,6 +4,7 @@ go 1.19
 
 require (
 	github.com/appcrash/media v0.0.4-0.20231205004418-e70ef46d7dea
+	//github.com/appcrash/GoRTP v0.0.0-20230908065021-9438aed8cc72
 	github.com/streamFunc/RTPGoAPI v1.0.10
 	google.golang.org/grpc v1.60.1
 )

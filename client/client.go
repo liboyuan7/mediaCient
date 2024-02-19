@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/appcrash/media/server/rpc"
 	"github.com/streamFunc/RTPGoAPI/rtp"
+	//"github.com/appcrash/GoRTP/rtp"
 	"github.com/streamFunc/mediaClient/port"
 	"google.golang.org/grpc"
 	"io"
@@ -265,7 +266,7 @@ func (c *client) mockSendRtp(id string, localIpStr string, localPort int, remote
 						return
 					}
 					pt, pts := packet.Payload, packet.Pts
-					session.PacketH264ToRtpAndSend(pt, uint32(pts), 123)
+					CPacketH264ToRtpAndSend(session, pt, uint32(pts), 123)
 
 				case <-ctx.Done():
 					session.CloseSession()
@@ -277,6 +278,25 @@ func (c *client) mockSendRtp(id string, localIpStr string, localPort int, remote
 	}
 
 	return cancel, nil
+}
+
+func CPacketH264ToRtpAndSend(s *rtp.Session, annexbPayload []byte, pts uint32, payloadType uint8) {
+	packetList := HCPacketListFromH264Mode(annexbPayload, pts, payloadType, 1200, false)
+
+	packetList.Iterate(func(p *HCRtpPacketList) {
+		payload, pt, pts1, mark := p.Payload, p.PayloadType, p.Pts, p.Marker
+		if payload != nil {
+			packet := s.NewDataPacket(pts1)
+			packet.SetMarker(mark)
+			packet.SetPayload(payload)
+			packet.SetPayloadType(pt)
+
+			if _, err := s.WriteData(packet); err != nil {
+				fmt.Printf(" PacketH264ToRtpAndSend WriteData fail...\n")
+			}
+
+		}
+	})
 }
 
 func (c *client) readH264AndPacket(filePath string) {
