@@ -1,0 +1,7 @@
+{
+	"grpcAddr": "127.0.0.1:5678",
+	"conCurrency": 4,
+	"numRequests": 12,
+	"audioGraph": "[rtp_src] -> [rtp_sink]",
+	"videoGraph": "[rtp_src] -> [rtp_sink]"
+}
