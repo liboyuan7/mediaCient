@@ -17,6 +17,7 @@ import (
 	serverAddr  = flag.String("server_addr", "127.0.0.1:5678", "The server address in the format of host:port")
 	concurrency = flag.Int("concurrency", 4, "The number of concurrent requests audio and video")
 	numRequests = flag.Int("num_requests", 12, "The total number of requests audio and video to be made")
+	runTime = flag.Int("run_time", 12, "The running time for every session")
 )*/
 
 func main() {
@@ -63,15 +64,23 @@ func runBenchmark(concurrency, numRequests int, p *port.MyPortPool) {
 				currentIndex := atomic.AddInt32(&index, 1)
 				id := "new_session_" + strconv.Itoa(int(currentIndex))
 
-				// 原子操作，确保并发安全的读取和修改 flag
-				isAudio := atomic.LoadInt32(&flag) == 1
-				atomic.StoreInt32(&flag, 1-atomic.LoadInt32(&flag))
-				if isAudio {
-					//gd := " [rtp_src] ->[rtp_pcm_alaw] -> [asrt:audio_transcode from_codec=pcm_alaw from_sample_rate=8000 to_codec=pcm_s16le to_sample_rate=16000] ->
-					//[evs_encoder channels=1 sample_rate=16000 encoderFormat=WB bitRate=24400 codec_name=pcma] -> [evs_decoder sample_rate=16000 bitRate=24400] ->[audio_rtp payloadType=106] -> [rtp_sink];\n"
-					client.StartSessionCall(p, id, true, globalConfig.AudioGraph)
+				if globalConfig.Mode == 0 {
+					client.StartSessionCall(p, id, true, globalConfig.AudioGraph, globalConfig.RunTime)
+				} else if globalConfig.Mode == 1 {
+					client.StartSessionCall(p, id, false, globalConfig.VideoGraph, globalConfig.RunTime)
+				} else if globalConfig.Mode == 2 {
+					// 原子操作，确保并发安全的读取和修改 flag
+					isAudio := atomic.LoadInt32(&flag) == 1
+					atomic.StoreInt32(&flag, 1-atomic.LoadInt32(&flag))
+					if isAudio {
+						//gd := " [rtp_src] ->[rtp_pcm_alaw] -> [asrt:audio_transcode from_codec=pcm_alaw from_sample_rate=8000 to_codec=pcm_s16le to_sample_rate=16000] ->
+						//[evs_encoder channels=1 sample_rate=16000 encoderFormat=WB bitRate=24400 codec_name=pcma] -> [evs_decoder sample_rate=16000 bitRate=24400] ->[audio_rtp payloadType=106] -> [rtp_sink];\n"
+						client.StartSessionCall(p, id, true, globalConfig.AudioGraph, globalConfig.RunTime)
+					} else {
+						client.StartSessionCall(p, id, false, globalConfig.VideoGraph, globalConfig.RunTime)
+					}
 				} else {
-					client.StartSessionCall(p, id, false, globalConfig.VideoGraph)
+					fmt.Printf("not support mode,error\n")
 				}
 				time.Sleep(time.Millisecond)
 			}
@@ -87,8 +96,10 @@ type ClientConfig struct {
 	GrpcAddr    string `json:"grpcAddr"`
 	ConCurrency int    `json:"conCurrency"`
 	NumRequests int    `json:"numRequests"`
+	RunTime     int    `json:"runTime"`
 	AudioGraph  string `json:"audioGraph"`
 	VideoGraph  string `json:"videoGraph"`
+	Mode        int    `json:"mode"`
 }
 
 // 创建一个变量来存储解析后的 JSON 数据
@@ -111,6 +122,8 @@ func parseGraph() {
 	fmt.Println("GrpcAddr:", globalConfig.GrpcAddr)
 	fmt.Println("ConCurrency:", globalConfig.ConCurrency)
 	fmt.Println("NumRequests:", globalConfig.NumRequests)
+	fmt.Println("runTime:", globalConfig.RunTime)
 	fmt.Println("audioGraph:", globalConfig.AudioGraph)
 	fmt.Println("videoGraph:", globalConfig.VideoGraph)
+	fmt.Println("mode:", globalConfig.Mode)
 }

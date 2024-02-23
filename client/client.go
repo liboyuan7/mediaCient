@@ -109,7 +109,7 @@ func (c *client) close() {
 	c.conn.Close()
 }
 
-func StartSessionCall(p *port.MyPortPool, id string, isAudio bool, graphDesc string) {
+func StartSessionCall(p *port.MyPortPool, id string, isAudio bool, graphDesc string, runTime int) {
 	instanceId := id
 	c := &client{instanceId: instanceId}
 	c.h264PacketChan = make(chan *MyH264Packet, 32)
@@ -188,7 +188,7 @@ func StartSessionCall(p *port.MyPortPool, id string, isAudio bool, graphDesc str
 		go c.readH264AndPacket1()
 	}
 
-	time.Sleep(time.Second * 120)
+	time.Sleep(time.Second * time.Duration(runTime))
 	if _, err = c.mediaClient.StopSession(ctx, &rpc.StopParam{SessionId: session.SessionId}, opts...); err != nil {
 		panic(err)
 	} else {
