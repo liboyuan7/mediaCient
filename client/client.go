@@ -82,7 +82,7 @@ func (c *client) connect(onReceive recvFunc) {
 				return
 			}
 			if err != nil {
-				fmt.Printf("receive error: %v", err)
+				fmt.Printf("receive error: %v\n", err)
 				return
 			}
 			onReceive(in)
@@ -138,7 +138,7 @@ func StartSessionCall(p *port.MyPortPool, id string, isAudio bool, graphDesc str
 		}}
 	}
 	session, err := c.mediaClient.PrepareSession(ctx, &rpc.CreateParam{
-		PeerIp:     "127.0.0.1",
+		PeerIp:     GrpcIp,
 		PeerPort:   peerPort,
 		Codecs:     codecs,
 		GraphDesc:  graphDesc,
@@ -146,7 +146,10 @@ func StartSessionCall(p *port.MyPortPool, id string, isAudio bool, graphDesc str
 	}, opts...)
 	if err != nil {
 		//panic(err)
-		fmt.Printf("error PrepareSession fail %v\n", err)
+		fmt.Printf("error PrepareSession fail id:%v error: %v\n", id, err)
+		cancel()
+		p.Put(uint16(peerPort))
+		c.close()
 		return
 
 	}
@@ -155,11 +158,19 @@ func StartSessionCall(p *port.MyPortPool, id string, isAudio bool, graphDesc str
 	if _, err = c.mediaClient.UpdateSession(ctx, &rpc.UpdateParam{SessionId: session.SessionId, PeerPort: localPort}, opts...); err != nil {
 		//panic(err)
 		fmt.Printf("error UpdateSession fail %v\n", err)
+		cancel()
+		p.Put(uint16(peerPort))
+		p.Put(uint16(localPort))
+		c.close()
 		return
 	}
 	if _, err = c.mediaClient.StartSession(ctx, &rpc.StartParam{SessionId: session.SessionId}, opts...); err != nil {
 		//panic(err)
 		fmt.Printf("error StartSession fail %v\n", err)
+		cancel()
+		p.Put(uint16(peerPort))
+		p.Put(uint16(localPort))
+		c.close()
 		return
 	}
 	go c.keepalive(ctx)
@@ -169,6 +180,11 @@ func StartSessionCall(p *port.MyPortPool, id string, isAudio bool, graphDesc str
 	if cancelRtp, err = c.mockSendRtp(id, "127.0.0.1", int(localPort), session.LocalIp, int(session.LocalRtpPort), isAudio); err != nil {
 		//panic(err)
 		fmt.Printf("error mockSendRtp fail %v\n", err)
+		cancel()
+		cancelRtp()
+		p.Put(uint16(peerPort))
+		p.Put(uint16(localPort))
+		c.close()
 		return
 	}
 	go c.reportSessionInfo(ctx, session.SessionId)
@@ -189,8 +205,16 @@ func StartSessionCall(p *port.MyPortPool, id string, isAudio bool, graphDesc str
 	}
 
 	time.Sleep(time.Second * time.Duration(runTime))
+	//	ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
 	if _, err = c.mediaClient.StopSession(ctx, &rpc.StopParam{SessionId: session.SessionId}, opts...); err != nil {
-		panic(err)
+		//panic(err)
+		fmt.Printf("StopSession fail,error:%v id:%v SessionId:%v\n", err, id, session.SessionId)
+		cancel()
+		cancelRtp()
+		p.Put(uint16(peerPort))
+		p.Put(uint16(localPort))
+		c.close()
+		return
 	} else {
 		fmt.Printf("StopSession %v\n", id)
 	}
@@ -200,12 +224,12 @@ func StartSessionCall(p *port.MyPortPool, id string, isAudio bool, graphDesc str
 	p.Put(uint16(peerPort))
 	p.Put(uint16(localPort))
 	c.close()
-	time.Sleep(3 * time.Second)
+	time.Sleep(5 * time.Second)
 
 }
 
 func (c *client) mockSendRtp(id string, localIpStr string, localPort int, remoteIpStr string, remotePort int, isAudio bool) (context.CancelFunc, error) {
-	fmt.Printf("\nstream id:%v localip:%v localport:%v remoteip:%v remoteport:%v ", id, localIpStr, localPort, remoteIpStr, remotePort)
+	fmt.Printf("stream id:%v localip:%v localport:%v remoteip:%v remoteport:%v \n", id, localIpStr, localPort, remoteIpStr, remotePort)
 	localIp, _ := net.ResolveIPAddr("ip", localIpStr)
 	remoteIp, _ := net.ResolveIPAddr("ip", remoteIpStr)
 	tpLocal, err := rtp.NewTransportUDP(localIp, localPort, "")

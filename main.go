@@ -82,9 +82,9 @@ func runBenchmark(concurrency, numRequests int, p *port.MyPortPool) {
 				} else {
 					fmt.Printf("not support mode,error\n")
 				}
-				time.Sleep(time.Millisecond)
 			}
 		}(i)
+		//time.Sleep(time.Millisecond * 1)
 	}
 
 	// Wait for all workers to finish.
