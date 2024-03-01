@@ -1,10 +1,14 @@
 {
 	"grpcAddr": "127.0.0.1:5678",
-	"conCurrency": 4,
-	"numRequests": 8,
+	"startPort": 20000,
+	"endPort": 30000,
+	"conCurrency": 200,
+	"requestsPerSecond": 100,
 	"audioGraph": "[rtp_src] -> [rtp_sink]",
 	"videoGraph": "[rtp_src] -> [rtp_sink]",
-	"runTime": 120,
+	"interval": 10,
+	"duration": 200,
+	"rtpRunTime": 60,
 	"mode":0,
 	"_comment": "mode audioSession:0 videoSession:1 audio and video session:2"
 }

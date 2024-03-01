@@ -8,7 +8,6 @@ import (
 	"net"
 	"os"
 	"strconv"
-	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -21,7 +20,7 @@ import (
 )*/
 
 func main() {
-	parseGraph()
+	parseConfigJson()
 
 	//flag.Parse()
 
@@ -40,22 +39,22 @@ func main() {
 	client.InitVideoDataCache("./raw.h264")
 
 	portRequest := port.NewPortPool()
-	portRequest.Init(20000, 30000)
+	portRequest.Init(uint16(globalConfig.StartPort), uint16(globalConfig.EndPort))
 
 	// Perform the benchmark.
 	start := time.Now()
-	runBenchmark(globalConfig.ConCurrency, globalConfig.NumRequests, portRequest)
+	runBenchmark(globalConfig.ConCurrency, portRequest)
 	elapsed := time.Since(start)
 
 	fmt.Printf("Total time taken: %s\n", elapsed)
-	fmt.Printf("Requests per second: %.2f\n", float64(globalConfig.NumRequests)/elapsed.Seconds())
 }
 
-func runBenchmark(concurrency, numRequests int, p *port.MyPortPool) {
+/*func runBenchmark(concurrency, numRequests int, p *port.MyPortPool) {
 	var wg sync.WaitGroup
 	requestsPerWorker := numRequests / concurrency
 	var index int32
 	var flag int32
+	requestsPerSecond := 500
 	for i := 0; i < concurrency; i++ {
 		wg.Add(1)
 		go func(workerID int) {
@@ -82,6 +81,7 @@ func runBenchmark(concurrency, numRequests int, p *port.MyPortPool) {
 				} else {
 					fmt.Printf("not support mode,error\n")
 				}
+				time.Sleep(time.Second / time.Duration(requestsPerSecond))
 			}
 		}(i)
 		//time.Sleep(time.Millisecond * 1)
@@ -89,23 +89,91 @@ func runBenchmark(concurrency, numRequests int, p *port.MyPortPool) {
 
 	// Wait for all workers to finish.
 	wg.Wait()
+}*/
+
+func runBenchmark(concurrency int, p *port.MyPortPool) {
+	var index int32
+	var flag int32
+	requestsPerSecond := globalConfig.RequestsPerSecond
+	duration := globalConfig.Duration // 默认持续时间为一分钟
+	gameOver := false
+
+	// 创建初始的并发数
+	for i := 0; i < concurrency; i++ {
+		go createSession(p, &index, &flag)
+	}
+
+	if requestsPerSecond >= 0 {
+		// 每隔一秒新增创建 500 路，持续一分钟
+		ticker := time.NewTicker(time.Second * time.Duration(globalConfig.Interval)) //默认每隔1秒递增
+		defer ticker.Stop()
+
+		timeout := time.After(time.Duration(duration) * time.Second)
+		for {
+			select {
+			case <-ticker.C:
+				// 每秒创建 500 路
+				for i := 0; i < requestsPerSecond; i++ {
+					go createSession(p, &index, &flag)
+				}
+			case <-timeout:
+				// 完成持续时间
+				gameOver = true
+				break
+			}
+		}
+	}
+
+	for {
+		if gameOver {
+			break
+		}
+		time.Sleep(time.Second)
+	}
+
+}
+
+func createSession(p *port.MyPortPool, index, flag *int32) {
+
+	currentIndex := atomic.AddInt32(index, 1)
+	id := "new_session_" + strconv.Itoa(int(currentIndex))
+
+	if globalConfig.Mode == 0 {
+		client.StartSessionCall(p, id, true, globalConfig.AudioGraph, globalConfig.RtpRunTime)
+	} else if globalConfig.Mode == 1 {
+		client.StartSessionCall(p, id, false, globalConfig.VideoGraph, globalConfig.RtpRunTime)
+	} else if globalConfig.Mode == 2 {
+		isAudio := atomic.LoadInt32(flag) == 1
+		atomic.StoreInt32(flag, 1-atomic.LoadInt32(flag))
+		if isAudio {
+			client.StartSessionCall(p, id, true, globalConfig.AudioGraph, globalConfig.RtpRunTime)
+		} else {
+			client.StartSessionCall(p, id, false, globalConfig.VideoGraph, globalConfig.RtpRunTime)
+		}
+	} else {
+		fmt.Printf("not support mode,error\n")
+	}
 }
 
 // ClientConfig 定义一个结构体来表示 JSON 文件中的数据结构
 type ClientConfig struct {
-	GrpcAddr    string `json:"grpcAddr"`
-	ConCurrency int    `json:"conCurrency"`
-	NumRequests int    `json:"numRequests"`
-	RunTime     int    `json:"runTime"`
-	AudioGraph  string `json:"audioGraph"`
-	VideoGraph  string `json:"videoGraph"`
-	Mode        int    `json:"mode"`
+	GrpcAddr          string `json:"grpcAddr"`
+	StartPort         int    `json:"startPort"`
+	EndPort           int    `json:"endPort"`
+	ConCurrency       int    `json:"conCurrency"`
+	RequestsPerSecond int    `json:"requestsPerSecond"`
+	Interval          int    `json:"interval"`
+	Duration          int    `json:"duration"`
+	RtpRunTime        int    `json:"rtpRunTime"`
+	AudioGraph        string `json:"audioGraph"`
+	VideoGraph        string `json:"videoGraph"`
+	Mode              int    `json:"mode"`
 }
 
 // 创建一个变量来存储解析后的 JSON 数据
 var globalConfig ClientConfig
 
-func parseGraph() {
+func parseConfigJson() {
 	file, err := os.Open("config.json")
 	if err != nil {
 		fmt.Println("Error opening JSON file:", err)
@@ -120,9 +188,13 @@ func parseGraph() {
 	}
 
 	fmt.Println("GrpcAddr:", globalConfig.GrpcAddr)
+	fmt.Println("StartPort:", globalConfig.StartPort)
+	fmt.Println("EndPort:", globalConfig.EndPort)
 	fmt.Println("ConCurrency:", globalConfig.ConCurrency)
-	fmt.Println("NumRequests:", globalConfig.NumRequests)
-	fmt.Println("runTime:", globalConfig.RunTime)
+	fmt.Println("requestsPerSecond:", globalConfig.RequestsPerSecond)
+	fmt.Println("Interval:", globalConfig.Interval)
+	fmt.Println("Duration:", globalConfig.Duration)
+	fmt.Println("runTime:", globalConfig.RtpRunTime)
 	fmt.Println("audioGraph:", globalConfig.AudioGraph)
 	fmt.Println("videoGraph:", globalConfig.VideoGraph)
 	fmt.Println("mode:", globalConfig.Mode)

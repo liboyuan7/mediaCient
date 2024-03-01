@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"github.com/appcrash/media/server/rpc"
 	"github.com/streamFunc/RTPGoAPI/rtp"
+	"sync/atomic"
+
 	//"github.com/appcrash/GoRTP/rtp"
 	"github.com/streamFunc/mediaClient/port"
 	"google.golang.org/grpc"
@@ -20,6 +22,9 @@ var (
 	GrpcIp   = "127.0.0.1"
 	GrpcPort = 5678
 )
+
+var sessionsCounter int32 // 用于统计当前会话数量的计数器
+var counterMutex sync.Mutex
 
 type recvFunc func(event *rpc.SystemEvent)
 
@@ -204,6 +209,9 @@ func StartSessionCall(p *port.MyPortPool, id string, isAudio bool, graphDesc str
 		go c.readH264AndPacket1()
 	}
 
+	atomic.AddInt32(&sessionsCounter, 1)
+	fmt.Println("Current sessionsCounter:", atomic.LoadInt32(&sessionsCounter))
+
 	time.Sleep(time.Second * time.Duration(runTime))
 	//	ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
 	if _, err = c.mediaClient.StopSession(ctx, &rpc.StopParam{SessionId: session.SessionId}, opts...); err != nil {
@@ -224,7 +232,8 @@ func StartSessionCall(p *port.MyPortPool, id string, isAudio bool, graphDesc str
 	p.Put(uint16(peerPort))
 	p.Put(uint16(localPort))
 	c.close()
-	time.Sleep(5 * time.Second)
+	atomic.AddInt32(&sessionsCounter, -1)
+	//time.Sleep(5 * time.Second)
 
 }
 
