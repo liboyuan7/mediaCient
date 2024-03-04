@@ -95,7 +95,7 @@ func runBenchmark(concurrency int, p *port.MyPortPool) {
 	var index int32
 	var flag int32
 	requestsPerSecond := globalConfig.RequestsPerSecond
-	duration := globalConfig.Duration // 默认持续时间为一分钟
+	duration := globalConfig.Duration
 	gameOver := false
 
 	// 创建初始的并发数
@@ -104,22 +104,20 @@ func runBenchmark(concurrency int, p *port.MyPortPool) {
 	}
 
 	if requestsPerSecond >= 0 {
-		// 每隔一秒新增创建 500 路，持续一分钟
-		ticker := time.NewTicker(time.Second * time.Duration(globalConfig.Interval)) //默认每隔1秒递增
+		ticker := time.NewTicker(time.Second * time.Duration(globalConfig.Interval))
 		defer ticker.Stop()
 
 		timeout := time.After(time.Duration(duration) * time.Second)
 		for {
 			select {
 			case <-ticker.C:
-				// 每秒创建 500 路
 				for i := 0; i < requestsPerSecond; i++ {
 					go createSession(p, &index, &flag)
 				}
 			case <-timeout:
 				// 完成持续时间
 				gameOver = true
-				break
+				return
 			}
 		}
 	}
