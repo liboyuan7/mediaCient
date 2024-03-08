@@ -45,6 +45,7 @@ func main() {
 	start := time.Now()
 	runBenchmark(globalConfig.ConCurrency, portRequest)
 	elapsed := time.Since(start)
+	time.Sleep(time.Second * time.Duration(globalConfig.RtpRunTime*2))
 
 	fmt.Printf("Total time taken: %s\n", elapsed)
 }
@@ -96,16 +97,16 @@ func runBenchmark(concurrency int, p *port.MyPortPool) {
 	var flag int32
 	requestsPerSecond := globalConfig.RequestsPerSecond
 	duration := globalConfig.Duration
-	gameOver := false
 
 	// 创建初始的并发数
 	for i := 0; i < concurrency; i++ {
 		go createSession(p, &index, &flag)
 	}
 
+	time.Sleep(time.Second * time.Duration(globalConfig.RtpRunTime/2))
+
 	if requestsPerSecond >= 0 {
 		ticker := time.NewTicker(time.Second * time.Duration(globalConfig.Interval))
-		defer ticker.Stop()
 
 		timeout := time.After(time.Duration(duration) * time.Second)
 		for {
@@ -115,18 +116,10 @@ func runBenchmark(concurrency int, p *port.MyPortPool) {
 					go createSession(p, &index, &flag)
 				}
 			case <-timeout:
-				// 完成持续时间
-				gameOver = true
+				ticker.Stop()
 				return
 			}
 		}
-	}
-
-	for {
-		if gameOver {
-			break
-		}
-		time.Sleep(time.Second)
 	}
 
 }
