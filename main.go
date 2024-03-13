@@ -48,6 +48,7 @@ func main() {
 	time.Sleep(time.Second * time.Duration(globalConfig.RtpRunTime*2))
 
 	fmt.Printf("Total time taken: %s\n", elapsed)
+
 }
 
 /*func runBenchmark(concurrency, numRequests int, p *port.MyPortPool) {
@@ -130,16 +131,16 @@ func createSession(p *port.MyPortPool, index, flag *int32) {
 	id := "new_session_" + strconv.Itoa(int(currentIndex))
 
 	if globalConfig.Mode == 0 {
-		client.StartSessionCall(p, id, true, globalConfig.AudioGraph, globalConfig.RtpRunTime)
+		client.StartSessionCall(p, id, true, globalConfig.AudioGraph, globalConfig.RtpRunTime, globalConfig.SendLoop)
 	} else if globalConfig.Mode == 1 {
-		client.StartSessionCall(p, id, false, globalConfig.VideoGraph, globalConfig.RtpRunTime)
+		client.StartSessionCall(p, id, false, globalConfig.VideoGraph, globalConfig.RtpRunTime, globalConfig.SendLoop)
 	} else if globalConfig.Mode == 2 {
 		isAudio := atomic.LoadInt32(flag) == 1
 		atomic.StoreInt32(flag, 1-atomic.LoadInt32(flag))
 		if isAudio {
-			client.StartSessionCall(p, id, true, globalConfig.AudioGraph, globalConfig.RtpRunTime)
+			client.StartSessionCall(p, id, true, globalConfig.AudioGraph, globalConfig.RtpRunTime, globalConfig.SendLoop)
 		} else {
-			client.StartSessionCall(p, id, false, globalConfig.VideoGraph, globalConfig.RtpRunTime)
+			client.StartSessionCall(p, id, false, globalConfig.VideoGraph, globalConfig.RtpRunTime, globalConfig.SendLoop)
 		}
 	} else {
 		fmt.Printf("not support mode,error\n")
@@ -159,6 +160,7 @@ type ClientConfig struct {
 	AudioGraph        string `json:"audioGraph"`
 	VideoGraph        string `json:"videoGraph"`
 	Mode              int    `json:"mode"`
+	SendLoop          bool   `json:"sendLoop"`
 }
 
 // 创建一个变量来存储解析后的 JSON 数据
@@ -189,4 +191,5 @@ func parseConfigJson() {
 	fmt.Println("audioGraph:", globalConfig.AudioGraph)
 	fmt.Println("videoGraph:", globalConfig.VideoGraph)
 	fmt.Println("mode:", globalConfig.Mode)
+	fmt.Println("sendLoop:", globalConfig.SendLoop)
 }

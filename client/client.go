@@ -36,6 +36,7 @@ type client struct {
 	frame           []byte
 	h264PacketChan  chan *MyH264Packet
 	audioPacketChan chan []byte
+	endReadFlag     bool
 }
 
 type MyH264Packet struct {
@@ -114,11 +115,14 @@ func (c *client) close() {
 	c.conn.Close()
 }
 
-func StartSessionCall(p *port.MyPortPool, id string, isAudio bool, graphDesc string, runTime int) {
+func StartSessionCall(p *port.MyPortPool, id string, isAudio bool, graphDesc string, runTime int, loop bool) {
 	instanceId := id
 	c := &client{instanceId: instanceId}
 	c.h264PacketChan = make(chan *MyH264Packet, 32)
 	c.audioPacketChan = make(chan []byte, 32)
+	if loop {
+		c.endReadFlag = false
+	}
 
 	c.connect(func(event *rpc.SystemEvent) {
 		//fmt.Printf("recv event: %v\n", event)
@@ -150,47 +154,53 @@ func StartSessionCall(p *port.MyPortPool, id string, isAudio bool, graphDesc str
 		InstanceId: instanceId,
 	}, opts...)
 	if err != nil {
-		//panic(err)
 		fmt.Printf("error PrepareSession fail id:%v error: %v\n", id, err)
-		cancel()
-		p.Put(uint16(peerPort))
-		c.close()
-		return
-
+		panic(err)
+		//cancel()
+		//p.Put(uint16(peerPort))
+		//c.close()
+		//return
 	}
 
 	localPort := uint32(p.Get())
 	if _, err = c.mediaClient.UpdateSession(ctx, &rpc.UpdateParam{SessionId: session.SessionId, PeerPort: localPort}, opts...); err != nil {
-		//panic(err)
 		fmt.Printf("error UpdateSession fail %v\n", err)
-		cancel()
-		p.Put(uint16(peerPort))
-		p.Put(uint16(localPort))
-		c.close()
-		return
+		panic(err)
+		//cancel()
+		//p.Put(uint16(peerPort))
+		//p.Put(uint16(localPort))
+		//close(c.audioPacketChan)
+		//close(c.h264PacketChan)
+		//c.close()
+		//return
 	}
 	if _, err = c.mediaClient.StartSession(ctx, &rpc.StartParam{SessionId: session.SessionId}, opts...); err != nil {
-		//panic(err)
 		fmt.Printf("error StartSession fail %v\n", err)
-		cancel()
-		p.Put(uint16(peerPort))
-		p.Put(uint16(localPort))
-		c.close()
-		return
+		panic(err)
+		//cancel()
+		//p.Put(uint16(peerPort))
+		//p.Put(uint16(localPort))
+		//close(c.audioPacketChan)
+		//close(c.h264PacketChan)
+		//c.close()
+		//return
+	} else {
+		fmt.Printf("StartSession success id:%v remotePort:%v\n", id, session.LocalRtpPort)
 	}
 	go c.keepalive(ctx)
 	time.Sleep(1 * time.Second)
 
 	var cancelRtp context.CancelFunc
 	if cancelRtp, err = c.mockSendRtp(id, "127.0.0.1", int(localPort), session.LocalIp, int(session.LocalRtpPort), isAudio); err != nil {
-		//panic(err)
 		fmt.Printf("error mockSendRtp fail %v\n", err)
-		cancel()
-		cancelRtp()
-		p.Put(uint16(peerPort))
-		p.Put(uint16(localPort))
-		c.close()
-		return
+		panic(err)
+		//cancel()
+		//p.Put(uint16(peerPort))
+		//p.Put(uint16(localPort))
+		//close(c.audioPacketChan)
+		//close(c.h264PacketChan)
+		//c.close()
+		//return
 	}
 	go c.reportSessionInfo(ctx, session.SessionId)
 
@@ -203,36 +213,46 @@ func StartSessionCall(p *port.MyPortPool, id string, isAudio bool, graphDesc str
 	}*/
 	if isAudio {
 		//go c.getAudioData("./audio.pcm")
-		go c.getAudioData1()
+		go c.getAudioData1(loop)
 	} else {
 		//go c.readH264AndPacket("./raw.h264")
-		go c.readH264AndPacket1()
+		go c.readH264AndPacket1(loop)
 	}
 
 	atomic.AddInt32(&sessionsCounter, 1)
-	fmt.Println("Current sessionsCounter:", atomic.LoadInt32(&sessionsCounter))
+	fmt.Println("start Current sessionsCounter:", atomic.LoadInt32(&sessionsCounter))
 
 	time.Sleep(time.Second * time.Duration(runTime))
-	//	ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
-	if _, err = c.mediaClient.StopSession(ctx, &rpc.StopParam{SessionId: session.SessionId}, opts...); err != nil {
-		//panic(err)
-		fmt.Printf("StopSession fail,error:%v id:%v SessionId:%v\n", err, id, session.SessionId)
-		cancel()
-		cancelRtp()
-		p.Put(uint16(peerPort))
-		p.Put(uint16(localPort))
-		c.close()
-		return
-	} else {
-		fmt.Printf("StopSession %v\n", id)
+	if loop {
+		c.endReadFlag = true
+		time.Sleep(time.Second * 1)
 	}
-	time.Sleep(1 * time.Second)
-	cancel()
 	cancelRtp()
+
+	//	fmt.Printf("time to stop session :%v remotePort:%v sessionID:%v\n", id, session.LocalRtpPort, session.SessionId)
+	if _, err = c.mediaClient.StopSession(ctx, &rpc.StopParam{SessionId: session.SessionId}, opts...); err != nil {
+		fmt.Printf("StopSession fail,error:%v id:%v SessionId:%v\n", err, id, session.SessionId)
+		panic(err)
+		//cancel()
+		//cancelRtp()
+		//p.Put(uint16(peerPort))
+		//p.Put(uint16(localPort))
+		//close(c.audioPacketChan)
+		//close(c.h264PacketChan)
+		//c.close()
+		//return
+	} else {
+		fmt.Printf("StopSession %v remotePort:%v\n", id, session.LocalRtpPort)
+	}
+	time.Sleep(time.Second)
+	cancel()
+	close(c.audioPacketChan)
+	close(c.h264PacketChan)
 	p.Put(uint16(peerPort))
 	p.Put(uint16(localPort))
 	c.close()
 	atomic.AddInt32(&sessionsCounter, -1)
+	fmt.Println("after destroy Current sessionsCounter:", atomic.LoadInt32(&sessionsCounter))
 	//time.Sleep(5 * time.Second)
 
 }
@@ -277,6 +297,7 @@ func (c *client) mockSendRtp(id string, localIpStr string, localPort int, remote
 				select {
 				case payload, more := <-c.audioPacketChan:
 					if !more {
+						fmt.Printf("audioPacketChan end close\n")
 						return
 					}
 					packet := session.NewDataPacket(pts)
@@ -483,16 +504,20 @@ var (
 	videoDataCacheLock sync.Mutex
 )
 
-func (c *client) getAudioData1() {
+func (c *client) getAudioData1(isLoop bool) {
 	ticker := time.Tick(20 * time.Millisecond)
 	start := 0
 	end := 160
 
 	for range ticker {
+		if c.endReadFlag {
+			break
+		}
 		audioDataCacheLock.Lock()
 		diff := len(audioDataCache) - end
 		if diff < 0 {
-			break
+			audioDataCacheLock.Unlock()
+			return
 		}
 		if diff >= 160 {
 			data := audioDataCache[start:end]
@@ -501,14 +526,21 @@ func (c *client) getAudioData1() {
 		} else {
 			c.audioPacketChan <- audioDataCache[start:]
 			audioDataCacheLock.Unlock()
-			break
+			if isLoop {
+				start = 0
+				end = 160
+				time.Sleep(time.Second * 1)
+				continue
+			} else {
+				break
+			}
 		}
 		start += 160
 		end += 160
 	}
 }
 
-func (c *client) readH264AndPacket1() {
+func (c *client) readH264AndPacket1(isLoop bool) {
 	framesPerSecond := 25
 	frameDuration := time.Second / time.Duration(framesPerSecond)
 	ticker := time.Tick(frameDuration)
@@ -516,6 +548,9 @@ func (c *client) readH264AndPacket1() {
 	end := 4096
 
 	for range ticker {
+		if c.endReadFlag {
+			break
+		}
 		videoDataCacheLock.Lock()
 		diff := len(videoDataCache) - end
 		if diff < 0 {
@@ -528,11 +563,19 @@ func (c *client) readH264AndPacket1() {
 		} else {
 			c.handleRawByte(videoDataCache[start:])
 			videoDataCacheLock.Unlock()
-			break
+			if isLoop {
+				start = 0
+				end = 4096
+				time.Sleep(time.Second * 1)
+				continue
+			} else {
+				break
+			}
 		}
 		start += 4096
 		end += 4096
 	}
+
 }
 
 func InitAudioDataCache(filePath string) error {

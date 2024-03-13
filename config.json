@@ -10,5 +10,6 @@
 	"duration": 600,
 	"rtpRunTime": 300,
 	"mode":0,
+	"sendLoop": false,
 	"_comment": "mode audioSession:0 videoSession:1 audio and video session:2"
 }
