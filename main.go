@@ -106,7 +106,7 @@ func runBenchmark(concurrency int, p *port.MyPortPool) {
 
 	time.Sleep(time.Second * time.Duration(globalConfig.RtpRunTime/2))
 
-	if requestsPerSecond >= 0 {
+	if requestsPerSecond > 0 {
 		ticker := time.NewTicker(time.Second * time.Duration(globalConfig.Interval))
 
 		timeout := time.After(time.Duration(duration) * time.Second)
@@ -121,6 +121,8 @@ func runBenchmark(concurrency int, p *port.MyPortPool) {
 				return
 			}
 		}
+	} else {
+		return
 	}
 
 }
