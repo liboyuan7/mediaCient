@@ -156,34 +156,16 @@ func StartSessionCall(p *port.MyPortPool, id string, isAudio bool, graphDesc str
 	if err != nil {
 		fmt.Printf("error PrepareSession fail id:%v error: %v\n", id, err)
 		panic(err)
-		//cancel()
-		//p.Put(uint16(peerPort))
-		//c.close()
-		//return
 	}
 
 	localPort := uint32(p.Get())
 	if _, err = c.mediaClient.UpdateSession(ctx, &rpc.UpdateParam{SessionId: session.SessionId, PeerPort: localPort}, opts...); err != nil {
 		fmt.Printf("error UpdateSession fail %v\n", err)
 		panic(err)
-		//cancel()
-		//p.Put(uint16(peerPort))
-		//p.Put(uint16(localPort))
-		//close(c.audioPacketChan)
-		//close(c.h264PacketChan)
-		//c.close()
-		//return
 	}
 	if _, err = c.mediaClient.StartSession(ctx, &rpc.StartParam{SessionId: session.SessionId}, opts...); err != nil {
 		fmt.Printf("error StartSession fail %v\n", err)
 		panic(err)
-		//cancel()
-		//p.Put(uint16(peerPort))
-		//p.Put(uint16(localPort))
-		//close(c.audioPacketChan)
-		//close(c.h264PacketChan)
-		//c.close()
-		//return
 	} else {
 		fmt.Printf("StartSession success id:%v remotePort:%v\n", id, session.LocalRtpPort)
 	}
@@ -194,13 +176,6 @@ func StartSessionCall(p *port.MyPortPool, id string, isAudio bool, graphDesc str
 	if cancelRtp, err = c.mockSendRtp(id, "127.0.0.1", int(localPort), session.LocalIp, int(session.LocalRtpPort), isAudio); err != nil {
 		fmt.Printf("error mockSendRtp fail %v\n", err)
 		panic(err)
-		//cancel()
-		//p.Put(uint16(peerPort))
-		//p.Put(uint16(localPort))
-		//close(c.audioPacketChan)
-		//close(c.h264PacketChan)
-		//c.close()
-		//return
 	}
 	go c.reportSessionInfo(ctx, session.SessionId)
 
@@ -212,10 +187,8 @@ func StartSessionCall(p *port.MyPortPool, id string, isAudio bool, graphDesc str
 		panic(err)
 	}*/
 	if isAudio {
-		//go c.getAudioData("./audio.pcm")
 		go c.getAudioData1(loop)
 	} else {
-		//go c.readH264AndPacket("./raw.h264")
 		go c.readH264AndPacket1(loop)
 	}
 
@@ -233,14 +206,6 @@ func StartSessionCall(p *port.MyPortPool, id string, isAudio bool, graphDesc str
 	if _, err = c.mediaClient.StopSession(ctx, &rpc.StopParam{SessionId: session.SessionId}, opts...); err != nil {
 		fmt.Printf("StopSession fail,error:%v id:%v SessionId:%v\n", err, id, session.SessionId)
 		panic(err)
-		//cancel()
-		//cancelRtp()
-		//p.Put(uint16(peerPort))
-		//p.Put(uint16(localPort))
-		//close(c.audioPacketChan)
-		//close(c.h264PacketChan)
-		//c.close()
-		//return
 	} else {
 		fmt.Printf("StopSession %v remotePort:%v\n", id, session.LocalRtpPort)
 	}
@@ -293,6 +258,7 @@ func (c *client) mockSendRtp(id string, localIpStr string, localPort int, remote
 	if isAudio {
 		go func() {
 			var pts uint32
+			pts = 0
 			for {
 				select {
 				case payload, more := <-c.audioPacketChan:
@@ -304,6 +270,7 @@ func (c *client) mockSendRtp(id string, localIpStr string, localPort int, remote
 					packet.SetPayloadType(8)
 					packet.SetPayload(payload)
 					session.WriteData(packet)
+					pts += 160
 				case <-ctx.Done():
 					session.CloseSession()
 					return
