@@ -5,10 +5,10 @@ import (
 	"context"
 	"fmt"
 	"github.com/appcrash/media/server/rpc"
-	"github.com/streamFunc/RTPGoAPI/rtp"
+	//"github.com/streamFunc/RTPGoAPI/rtp"
 	"sync/atomic"
 
-	//"github.com/appcrash/GoRTP/rtp"
+	"github.com/appcrash/GoRTP/rtp"
 	"github.com/streamFunc/mediaClient/port"
 	"google.golang.org/grpc"
 	"io"
@@ -220,6 +220,50 @@ func StartSessionCall(p *port.MyPortPool, id string, isAudio bool, graphDesc str
 	fmt.Println("after destroy Current sessionsCounter:", atomic.LoadInt32(&sessionsCounter))
 	//time.Sleep(5 * time.Second)
 
+}
+
+func SendRtp(p *port.MyPortPool, id string, isAudio bool, remoteIP string, remotePort int, runTime int, loop bool) {
+	instanceId := id
+	c := &client{instanceId: instanceId}
+	c.h264PacketChan = make(chan *MyH264Packet, 32)
+	c.audioPacketChan = make(chan []byte, 32)
+	if loop {
+		c.endReadFlag = false
+	}
+
+	peerPort := uint32(p.Get())
+
+	var err error
+	localPort := uint32(p.Get())
+
+	time.Sleep(1 * time.Second)
+
+	var cancelRtp context.CancelFunc
+	if cancelRtp, err = c.mockSendRtp(id, "127.0.0.1", int(localPort), remoteIP, remotePort, isAudio); err != nil {
+		fmt.Printf("error mockSendRtp fail %v\n", err)
+		panic(err)
+	}
+
+	if isAudio {
+		go c.getAudioData1(loop)
+	} else {
+		go c.readH264AndPacket1(loop)
+	}
+
+	time.Sleep(time.Second * time.Duration(runTime))
+	if loop {
+		c.endReadFlag = true
+		time.Sleep(time.Second * 1)
+	}
+	cancelRtp()
+
+	//	fmt.Printf("time to stop session :%v remotePort:%v sessionID:%v\n", id, session.LocalRtpPort, session.SessionId)
+	time.Sleep(time.Second)
+	close(c.audioPacketChan)
+	close(c.h264PacketChan)
+	p.Put(uint16(peerPort))
+	p.Put(uint16(localPort))
+	//time.Sleep(5 * time.Second)
 }
 
 func (c *client) mockSendRtp(id string, localIpStr string, localPort int, remoteIpStr string, remotePort int, isAudio bool) (context.CancelFunc, error) {

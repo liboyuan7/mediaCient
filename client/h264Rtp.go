@@ -3,8 +3,8 @@ package client
 import (
 	"encoding/binary"
 	"fmt"
-	//"github.com/appcrash/GoRTP/rtp"
-	"github.com/streamFunc/RTPGoAPI/rtp"
+	"github.com/appcrash/GoRTP/rtp"
+	//"github.com/streamFunc/RTPGoAPI/rtp"
 )
 
 const (

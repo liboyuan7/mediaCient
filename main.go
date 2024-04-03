@@ -51,6 +51,27 @@ func main() {
 
 }
 
+func SendRtp(p *port.MyPortPool, index, flag *int32) {
+	currentIndex := atomic.AddInt32(index, 1)
+	id := "new_session_" + strconv.Itoa(int(currentIndex))
+
+	if globalConfig.Mode == 0 {
+		client.SendRtp(p, id, true, "127.0.0.1", 5004, globalConfig.RtpRunTime, globalConfig.SendLoop)
+	} else if globalConfig.Mode == 1 {
+		client.SendRtp(p, id, false, "127.0.0.1", 5004, globalConfig.RtpRunTime, globalConfig.SendLoop)
+	} else if globalConfig.Mode == 2 {
+		isAudio := atomic.LoadInt32(flag) == 1
+		atomic.StoreInt32(flag, 1-atomic.LoadInt32(flag))
+		if isAudio {
+			client.SendRtp(p, id, true, "127.0.0.1", 5004, globalConfig.RtpRunTime, globalConfig.SendLoop)
+		} else {
+			client.SendRtp(p, id, false, "127.0.0.1", 5004, globalConfig.RtpRunTime, globalConfig.SendLoop)
+		}
+	} else {
+		fmt.Printf("not support mode,error\n")
+	}
+}
+
 /*func runBenchmark(concurrency, numRequests int, p *port.MyPortPool) {
 	var wg sync.WaitGroup
 	requestsPerWorker := numRequests / concurrency
@@ -101,7 +122,8 @@ func runBenchmark(concurrency int, p *port.MyPortPool) {
 
 	// 创建初始的并发数
 	for i := 0; i < concurrency; i++ {
-		go createSession(p, &index, &flag)
+		//go createSession(p, &index, &flag)
+		go SendRtp(p, &index, &flag)
 	}
 
 	time.Sleep(time.Second * time.Duration(globalConfig.RtpRunTime/2))
@@ -114,7 +136,8 @@ func runBenchmark(concurrency int, p *port.MyPortPool) {
 			select {
 			case <-ticker.C:
 				for i := 0; i < requestsPerSecond; i++ {
-					go createSession(p, &index, &flag)
+					//go createSession(p, &index, &flag)
+					go SendRtp(p, &index, &flag)
 				}
 			case <-timeout:
 				ticker.Stop()
