@@ -56,16 +56,16 @@ func SendRtp(p *port.MyPortPool, index, flag *int32) {
 	id := "new_session_" + strconv.Itoa(int(currentIndex))
 
 	if globalConfig.Mode == 0 {
-		client.SendRtp(p, id, true, "127.0.0.1", 5004, globalConfig.RtpRunTime, globalConfig.SendLoop)
+		client.SendRtp(p, id, true, "127.0.0.1", 5004, globalConfig.RtpRunTime, globalConfig.SendLoop, globalConfig.RtpType)
 	} else if globalConfig.Mode == 1 {
-		client.SendRtp(p, id, false, "127.0.0.1", 5004, globalConfig.RtpRunTime, globalConfig.SendLoop)
+		client.SendRtp(p, id, false, "127.0.0.1", 5004, globalConfig.RtpRunTime, globalConfig.SendLoop, globalConfig.RtpType)
 	} else if globalConfig.Mode == 2 {
 		isAudio := atomic.LoadInt32(flag) == 1
 		atomic.StoreInt32(flag, 1-atomic.LoadInt32(flag))
 		if isAudio {
-			client.SendRtp(p, id, true, "127.0.0.1", 5004, globalConfig.RtpRunTime, globalConfig.SendLoop)
+			client.SendRtp(p, id, true, "127.0.0.1", 5004, globalConfig.RtpRunTime, globalConfig.SendLoop, globalConfig.RtpType)
 		} else {
-			client.SendRtp(p, id, false, "127.0.0.1", 5004, globalConfig.RtpRunTime, globalConfig.SendLoop)
+			client.SendRtp(p, id, false, "127.0.0.1", 5004, globalConfig.RtpRunTime, globalConfig.SendLoop, globalConfig.RtpType)
 		}
 	} else {
 		fmt.Printf("not support mode,error\n")
@@ -122,8 +122,11 @@ func runBenchmark(concurrency int, p *port.MyPortPool) {
 
 	// 创建初始的并发数
 	for i := 0; i < concurrency; i++ {
-		//go createSession(p, &index, &flag)
-		go SendRtp(p, &index, &flag)
+		if globalConfig.UseGrpc {
+			go createSession(p, &index, &flag)
+		} else {
+			go SendRtp(p, &index, &flag)
+		}
 	}
 
 	time.Sleep(time.Second * time.Duration(globalConfig.RtpRunTime/2))
@@ -136,8 +139,11 @@ func runBenchmark(concurrency int, p *port.MyPortPool) {
 			select {
 			case <-ticker.C:
 				for i := 0; i < requestsPerSecond; i++ {
-					//go createSession(p, &index, &flag)
-					go SendRtp(p, &index, &flag)
+					if globalConfig.UseGrpc {
+						go createSession(p, &index, &flag)
+					} else {
+						go SendRtp(p, &index, &flag)
+					}
 				}
 			case <-timeout:
 				ticker.Stop()
@@ -156,16 +162,16 @@ func createSession(p *port.MyPortPool, index, flag *int32) {
 	id := "new_session_" + strconv.Itoa(int(currentIndex))
 
 	if globalConfig.Mode == 0 {
-		client.StartSessionCall(p, id, true, globalConfig.AudioGraph, globalConfig.RtpRunTime, globalConfig.SendLoop)
+		client.StartSessionCall(p, id, true, globalConfig.AudioGraph, globalConfig.RtpRunTime, globalConfig.SendLoop, globalConfig.RtpType)
 	} else if globalConfig.Mode == 1 {
-		client.StartSessionCall(p, id, false, globalConfig.VideoGraph, globalConfig.RtpRunTime, globalConfig.SendLoop)
+		client.StartSessionCall(p, id, false, globalConfig.VideoGraph, globalConfig.RtpRunTime, globalConfig.SendLoop, globalConfig.RtpType)
 	} else if globalConfig.Mode == 2 {
 		isAudio := atomic.LoadInt32(flag) == 1
 		atomic.StoreInt32(flag, 1-atomic.LoadInt32(flag))
 		if isAudio {
-			client.StartSessionCall(p, id, true, globalConfig.AudioGraph, globalConfig.RtpRunTime, globalConfig.SendLoop)
+			client.StartSessionCall(p, id, true, globalConfig.AudioGraph, globalConfig.RtpRunTime, globalConfig.SendLoop, globalConfig.RtpType)
 		} else {
-			client.StartSessionCall(p, id, false, globalConfig.VideoGraph, globalConfig.RtpRunTime, globalConfig.SendLoop)
+			client.StartSessionCall(p, id, false, globalConfig.VideoGraph, globalConfig.RtpRunTime, globalConfig.SendLoop, globalConfig.RtpType)
 		}
 	} else {
 		fmt.Printf("not support mode,error\n")
@@ -174,6 +180,7 @@ func createSession(p *port.MyPortPool, index, flag *int32) {
 
 // ClientConfig 定义一个结构体来表示 JSON 文件中的数据结构
 type ClientConfig struct {
+	UseGrpc           bool   `json:"useGrpc"`
 	GrpcAddr          string `json:"grpcAddr"`
 	StartPort         int    `json:"startPort"`
 	EndPort           int    `json:"endPort"`
@@ -186,6 +193,7 @@ type ClientConfig struct {
 	VideoGraph        string `json:"videoGraph"`
 	Mode              int    `json:"mode"`
 	SendLoop          bool   `json:"sendLoop"`
+	RtpType           string `json:"rtpType"`
 }
 
 // 创建一个变量来存储解析后的 JSON 数据
@@ -205,6 +213,7 @@ func parseConfigJson() {
 		return
 	}
 
+	fmt.Println("UseGrpc:", globalConfig.UseGrpc)
 	fmt.Println("GrpcAddr:", globalConfig.GrpcAddr)
 	fmt.Println("StartPort:", globalConfig.StartPort)
 	fmt.Println("EndPort:", globalConfig.EndPort)
@@ -217,4 +226,5 @@ func parseConfigJson() {
 	fmt.Println("videoGraph:", globalConfig.VideoGraph)
 	fmt.Println("mode:", globalConfig.Mode)
 	fmt.Println("sendLoop:", globalConfig.SendLoop)
+	fmt.Println("rtpType:", globalConfig.RtpType)
 }

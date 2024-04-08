@@ -1,4 +1,5 @@
 {
+	"useGrpc": true,
 	"grpcAddr": "127.0.0.1:5678",
 	"startPort": 10000,
 	"endPort": 30000,
@@ -7,9 +8,10 @@
 	"audioGraph": "[rtp_src] -> [rtp_sink]",
 	"videoGraph": "[rtp_src] -> [rtp_sink]",
 	"interval": 10,
-	"duration": 600,
-	"rtpRunTime": 300,
+	"duration": 60,
+	"rtpRunTime": 30,
 	"mode":1,
+	"rtpType": "jRtp",
 	"sendLoop": false,
-	"_comment": "mode audioSession:0 videoSession:1 audio and video session:2"
+	"_comment": "mode audioSession:0 videoSession:1 audio and video session:2 ;useGrpc true:mediaClient false:just sendRtpClient"
 }

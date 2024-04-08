@@ -5,16 +5,13 @@ import (
 	"context"
 	"fmt"
 	"github.com/appcrash/media/server/rpc"
-	//"github.com/streamFunc/RTPGoAPI/rtp"
-	"sync/atomic"
-
-	"github.com/appcrash/GoRTP/rtp"
 	"github.com/streamFunc/mediaClient/port"
 	"google.golang.org/grpc"
 	"io"
 	"net"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -115,7 +112,7 @@ func (c *client) close() {
 	c.conn.Close()
 }
 
-func StartSessionCall(p *port.MyPortPool, id string, isAudio bool, graphDesc string, runTime int, loop bool) {
+func StartSessionCall(p *port.MyPortPool, id string, isAudio bool, graphDesc string, runTime int, loop bool, rtpType string) {
 	instanceId := id
 	c := &client{instanceId: instanceId}
 	c.h264PacketChan = make(chan *MyH264Packet, 32)
@@ -173,7 +170,11 @@ func StartSessionCall(p *port.MyPortPool, id string, isAudio bool, graphDesc str
 	time.Sleep(1 * time.Second)
 
 	var cancelRtp context.CancelFunc
-	if cancelRtp, err = c.mockSendRtp(id, "127.0.0.1", int(localPort), session.LocalIp, int(session.LocalRtpPort), isAudio); err != nil {
+	/*if cancelRtp, err = c.mockSendRtp(id, "127.0.0.1", int(localPort), session.LocalIp, int(session.LocalRtpPort), isAudio); err != nil {
+		fmt.Printf("error mockSendRtp fail %v\n", err)
+		panic(err)
+	}*/
+	if cancelRtp, err = c.mockSendRtpType(id, "127.0.0.1", int(localPort), session.LocalIp, int(session.LocalRtpPort), isAudio, rtpType); err != nil {
 		fmt.Printf("error mockSendRtp fail %v\n", err)
 		panic(err)
 	}
@@ -202,7 +203,7 @@ func StartSessionCall(p *port.MyPortPool, id string, isAudio bool, graphDesc str
 	}
 	cancelRtp()
 
-	//	fmt.Printf("time to stop session :%v remotePort:%v sessionID:%v\n", id, session.LocalRtpPort, session.SessionId)
+	//fmt.Printf("time to stop session :%v remotePort:%v sessionID:%v\n", id, session.LocalRtpPort, session.SessionId)
 	if _, err = c.mediaClient.StopSession(ctx, &rpc.StopParam{SessionId: session.SessionId}, opts...); err != nil {
 		fmt.Printf("StopSession fail,error:%v id:%v SessionId:%v\n", err, id, session.SessionId)
 		panic(err)
@@ -222,7 +223,7 @@ func StartSessionCall(p *port.MyPortPool, id string, isAudio bool, graphDesc str
 
 }
 
-func SendRtp(p *port.MyPortPool, id string, isAudio bool, remoteIP string, remotePort int, runTime int, loop bool) {
+func SendRtp(p *port.MyPortPool, id string, isAudio bool, remoteIP string, remotePort int, runTime int, loop bool, rtpType string) {
 	instanceId := id
 	c := &client{instanceId: instanceId}
 	c.h264PacketChan = make(chan *MyH264Packet, 32)
@@ -239,7 +240,7 @@ func SendRtp(p *port.MyPortPool, id string, isAudio bool, remoteIP string, remot
 	time.Sleep(1 * time.Second)
 
 	var cancelRtp context.CancelFunc
-	if cancelRtp, err = c.mockSendRtp(id, "127.0.0.1", int(localPort), remoteIP, remotePort, isAudio); err != nil {
+	if cancelRtp, err = c.mockSendRtpType(id, "127.0.0.1", int(localPort), remoteIP, remotePort, isAudio, rtpType); err != nil {
 		fmt.Printf("error mockSendRtp fail %v\n", err)
 		panic(err)
 	}
@@ -257,111 +258,13 @@ func SendRtp(p *port.MyPortPool, id string, isAudio bool, remoteIP string, remot
 	}
 	cancelRtp()
 
-	//	fmt.Printf("time to stop session :%v remotePort:%v sessionID:%v\n", id, session.LocalRtpPort, session.SessionId)
+	fmt.Printf("time to stop session :%v remotePort:%v \n", id, localPort)
 	time.Sleep(time.Second)
 	close(c.audioPacketChan)
 	close(c.h264PacketChan)
 	p.Put(uint16(peerPort))
 	p.Put(uint16(localPort))
 	//time.Sleep(5 * time.Second)
-}
-
-func (c *client) mockSendRtp(id string, localIpStr string, localPort int, remoteIpStr string, remotePort int, isAudio bool) (context.CancelFunc, error) {
-	fmt.Printf("stream id:%v localip:%v localport:%v remoteip:%v remoteport:%v \n", id, localIpStr, localPort, remoteIpStr, remotePort)
-	localIp, _ := net.ResolveIPAddr("ip", localIpStr)
-	remoteIp, _ := net.ResolveIPAddr("ip", remoteIpStr)
-	tpLocal, err := rtp.NewTransportUDP(localIp, localPort, "")
-	if err != nil {
-		return nil, err
-	}
-	session := rtp.NewSession(tpLocal, tpLocal)
-	strIndex, _ := session.NewSsrcStreamOut(&rtp.Address{
-		IPAddr:   localIp.IP,
-		DataPort: localPort,
-		CtrlPort: 1 + localPort,
-		Zone:     "",
-	}, 0, 0)
-	if isAudio {
-		session.SsrcStreamOutForIndex(strIndex).SetProfile("PCMA", 8)
-	} else {
-		session.SsrcStreamOutForIndex(strIndex).SetProfile("H264", 123)
-	}
-
-	if _, err = session.AddRemote(&rtp.Address{
-		IPAddr:   remoteIp.IP,
-		DataPort: remotePort,
-		CtrlPort: 1 + remotePort,
-		Zone:     "",
-	}); err != nil {
-		return nil, err
-	}
-	if err = session.StartSession(); err != nil {
-		return nil, err
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	if isAudio {
-		go func() {
-			var pts uint32
-			pts = 0
-			for {
-				select {
-				case payload, more := <-c.audioPacketChan:
-					if !more {
-						fmt.Printf("audioPacketChan end close\n")
-						return
-					}
-					packet := session.NewDataPacket(pts)
-					packet.SetPayloadType(8)
-					packet.SetPayload(payload)
-					session.WriteData(packet)
-					pts += 160
-				case <-ctx.Done():
-					session.CloseSession()
-					return
-				}
-			}
-
-		}()
-	} else {
-		go func() {
-			for {
-				select {
-				case packet, more := <-c.h264PacketChan:
-					if !more {
-						return
-					}
-					pt, pts := packet.Payload, packet.Pts
-					CPacketH264ToRtpAndSend(session, pt, uint32(pts), 123)
-
-				case <-ctx.Done():
-					session.CloseSession()
-					return
-				}
-			}
-
-		}()
-	}
-
-	return cancel, nil
-}
-
-func CPacketH264ToRtpAndSend(s *rtp.Session, annexbPayload []byte, pts uint32, payloadType uint8) {
-	packetList := HCPacketListFromH264Mode(annexbPayload, pts, payloadType, 1200, false)
-
-	packetList.Iterate(func(p *HCRtpPacketList) {
-		payload, pt, pts1, mark := p.Payload, p.PayloadType, p.Pts, p.Marker
-		if payload != nil {
-			packet := s.NewDataPacket(pts1)
-			packet.SetMarker(mark)
-			packet.SetPayload(payload)
-			packet.SetPayloadType(pt)
-
-			if _, err := s.WriteData(packet); err != nil {
-				fmt.Printf(" PacketH264ToRtpAndSend WriteData fail...\n")
-			}
-
-		}
-	})
 }
 
 func (c *client) readH264AndPacket(filePath string) {
@@ -636,4 +539,136 @@ func InitVideoDataCache(filePath string) error {
 
 	videoDataCache = data
 	return nil
+}
+
+func (c *client) mockSendRtpType(id string, localIpStr string, localPort int, remoteIpStr string, remotePort int, isAudio bool, rtpType string) (context.CancelFunc, error) {
+	fmt.Printf("stream id:%v localip:%v localport:%v remoteip:%v remoteport:%v \n", id, localIpStr, localPort, remoteIpStr, remotePort)
+
+	localIp, _ := net.ResolveIPAddr("ip", localIpStr)
+	session := NewSession(rtpType, localIp, localPort)
+
+	strIndex := session.NewSsrcStreamOut(localIp, localPort, 0, 0)
+	if isAudio {
+		if rtpType == "jRtp" {
+			if jRtpSessionHandle, ok := session.(*jRtpSession); ok {
+				jRtpSessionHandle.session.SsrcStreamOutForIndex(strIndex).SetProfile("PCMA", 8)
+			}
+		} else {
+			if goRtpSessionHandle, ok := session.(*GoRtpSession); ok {
+				goRtpSessionHandle.session.SsrcStreamOutForIndex(strIndex).SetProfile("PCMA", 8)
+			}
+		}
+	} else {
+		if rtpType == "jRtp" {
+			if jRtpSessionHandle, ok := session.(*jRtpSession); ok {
+				jRtpSessionHandle.session.SsrcStreamOutForIndex(strIndex).SetProfile("H264", 123)
+			}
+		} else {
+			if goRtpSessionHandle, ok := session.(*GoRtpSession); ok {
+				goRtpSessionHandle.session.SsrcStreamOutForIndex(strIndex).SetProfile("H264", 123)
+			}
+		}
+
+	}
+
+	if _, err := session.AddRemote(remoteIpStr, remotePort); err != nil {
+		return nil, err
+	}
+	if err := session.StartSession(); err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	if isAudio {
+		go func() {
+			var pts uint32
+			pts = 0
+			for {
+				select {
+				case payload, more := <-c.audioPacketChan:
+					if !more {
+						fmt.Printf("audioPacketChan end close\n")
+						return
+					}
+					session.NewDataPacket(pts)
+					if rtpType == "jRtp" {
+						if jRtpSessionHandle1, ok := session.(*jRtpSession); ok {
+							jRtpSessionHandle1.packet.SetPayloadType(8)
+							jRtpSessionHandle1.packet.SetPayload(payload)
+						} else {
+							fmt.Printf("error jRtpSession...\n")
+						}
+					} else {
+						if goRtpSessionHandle1, ok := session.(*GoRtpSession); ok {
+							goRtpSessionHandle1.packet.SetPayloadType(8)
+							goRtpSessionHandle1.packet.SetPayload(payload)
+						} else {
+							fmt.Printf("error GoRtpSession...\n")
+						}
+					}
+					session.WriteData()
+					pts += 160
+				case <-ctx.Done():
+					session.CloseSession()
+					return
+				}
+			}
+
+		}()
+	} else {
+		go func() {
+			for {
+				select {
+				case packet, more := <-c.h264PacketChan:
+					if !more {
+						return
+					}
+					data, pts := packet.Payload, packet.Pts
+					if rtpType == "jRtp" {
+						if jRtpSessionHandle1, ok := session.(*jRtpSession); ok {
+							packetList := HCPacketListFromH264Mode(data, uint32(pts), 123, 1200, false)
+							packetList.Iterate(func(p *HCRtpPacketList) {
+								payload, pt, pts1, mark := p.Payload, p.PayloadType, p.Pts, p.Marker
+								if payload != nil {
+									session.NewDataPacket(pts1)
+									jRtpSessionHandle1.packet.SetMarker(mark)
+									jRtpSessionHandle1.packet.SetPayload(payload)
+									jRtpSessionHandle1.packet.SetPayloadType(pt)
+
+									if _, err := session.WriteData(); err != nil {
+										fmt.Printf(" PacketH264ToRtpAndSend WriteData fail...\n")
+									}
+
+								}
+							})
+						}
+					} else {
+						if goRtpSessionHandle1, ok := session.(*GoRtpSession); ok {
+							packetList := HCPacketListFromH264Mode(data, uint32(pts), 123, 1200, false)
+							packetList.Iterate(func(p *HCRtpPacketList) {
+								payload, pt, pts1, mark := p.Payload, p.PayloadType, p.Pts, p.Marker
+								if payload != nil {
+									session.NewDataPacket(pts1)
+									goRtpSessionHandle1.packet.SetMarker(mark)
+									goRtpSessionHandle1.packet.SetPayload(payload)
+									goRtpSessionHandle1.packet.SetPayloadType(pt)
+
+									if _, err := session.WriteData(); err != nil {
+										fmt.Printf(" PacketH264ToRtpAndSend WriteData fail...\n")
+									}
+								}
+							})
+						}
+					}
+
+				case <-ctx.Done():
+					session.CloseSession()
+					return
+				}
+			}
+
+		}()
+	}
+
+	return cancel, nil
 }
